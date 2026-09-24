@@ -1,0 +1,29 @@
+# Job Radar profile. Copy this folder to profiles/<your-name>/ and edit.
+
+[candidate]
+name = "Alex Example"
+resume_file = "resume.md"      # plain-text resume in this folder
+years_experience = 5
+
+[preferences]
+target_titles = ["Backend Engineer", "Senior Software Engineer", "Platform Engineer"]
+remote_only = true
+locations = []                 # used when remote_only = false, e.g. ["Bengaluru", "Pune"]
+
+[skills]
+must_have    = ["Python", "PostgreSQL", "REST APIs"]
+nice_to_have = ["Kubernetes", "Kafka", "AWS"]
+avoid        = ["Salesforce", ".NET", "PHP"]   # titles with these are skipped for free
+
+[deal_breakers]
+keywords = ["unpaid", "commission only", "night shift"]   # any match skips the job
+
+[weights]                      # must add up to 100
+skills      = 40
+seniority   = 20
+domain      = 20
+preferences = 20
+
+[llm]
+provider = "gemini"
+# model = "gemini-3.5-flash-lite"
