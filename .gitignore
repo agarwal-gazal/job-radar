@@ -22,3 +22,4 @@ data/
 
 # macOS
 .DS_Store
+py/evals/golden.jsonl
