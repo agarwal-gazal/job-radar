@@ -1,6 +1,6 @@
-# Job Radar
-
-An AI job-search copilot that anyone can point at their own profile: it scores how well each job fits you, explains why, and skips jobs that break your rules before spending anything on an LLM.
+> An AI job-search copilot: collects jobs from public job boards,
+> scores them against your profile with an LLM, and serves the
+> matches to an AI assistant over MCP.
 
 It's built as three services, one per language:
 
@@ -44,26 +44,43 @@ provider = "gemini"
 
 To add yourself: copy `profiles/example/` to `profiles/<your-name>/`, replace `resume.md` with your resume as plain text, and edit `profile.toml`. Personal profiles are git-ignored, so only the example is shared.
 
-## How scoring works
 
+## Why
+
+Job boards optimise for volume. A senior engineer's problem is the
+opposite: too many roles, almost none of them a fit. Job Radar reads
+each posting against your actual profile and explains the score.
+
+
+
+## Architecture
 ```mermaid
 flowchart LR
-  J[Job] --> P{Prefilter: deal-breakers, avoided stacks, onsite vs remote}
-  P -- fails --> S[Skip, no LLM call]
-  P -- passes --> L[LLM rates skills, seniority, domain, preferences]
-  L --> V{Valid and consistent?}
-  V -- no --> R[Send error back to repair, max 3 tries]
-  R --> L
-  V -- yes --> W[Final score = weighted sum using your weights]
+  A["Job boards<br/>Lever, Greenhouse, Ashby"] --> B["Go collector<br/>workers, rate limit, dedupe"]
+  B --> C[("Postgres<br/>+ pgvector")]
+  C --> D["Python AI service<br/>prefilter, then LLM scorer"]
+  D --> C
+  C --> E["TypeScript MCP server<br/>search_jobs"]
+  E --> F["Claude Desktop"]
 ```
 
-Design choices:
+## What's built
+- **go/** — collector for public Lever, Greenhouse and Ashby boards.
+  Worker pool, per-host rate limiting, dedupe by content hash.
+- **py/** — FastAPI scoring service. Free rule-based prefilter, then
+  a structured LLM assessment validated with Pydantic and repaired
+  on failure. 15 tests against a fake LLM.
+- **ts/** — MCP server (in progress).
 
-1. **Filter cheaply first.** Rule-based checks skip obvious mismatches for free, so the LLM is only paid for jobs that could fit.
-2. **LLM output is untrusted.** The reply must match a JSON schema (Pydantic), stay in range (0–100), and pass rules the schema can't express. For example, the "missing must-haves" it reports must come from your own must-have list, so it can't invent requirements.
-3. **Retry-and-repair.** On any failure the exact error goes back to the model to fix, up to 3 attempts; after that the API returns 502 rather than bad data.
-4. **Scores computed in code.** The LLM rates the parts; the final score is a weighted sum using each user's weights, so the arithmetic is deterministic and personal.
-5. **Swappable provider.** The LLM sits behind a small `LLMClient` interface. Tests use a fake model with no network or API key.
+## Design decisions
+- **Prefilter before the LLM.** Most jobs are obvious rejects. Filtering
+  them with rules costs nothing; every LLM call costs money.
+- **The LLM scores dimensions, code computes the total.** Weights are
+  config, not prompt, so tuning them needs no model call.
+- **Missing must-haves are constrained to the user's own list**, so the
+  model can't invent a requirement you never asked for.
+
+## Run it locally
 
 ## Run it
 
@@ -95,3 +112,25 @@ py/tests/            unit tests with a fake LLM
 py/scripts/          score a JSON file of jobs from the command line
 data/                sample job postings
 ```
+
+## How scoring works
+
+```mermaid
+flowchart LR
+  J[Job] --> P{Prefilter: deal-breakers, avoided stacks, onsite vs remote}
+  P -- fails --> S[Skip, no LLM call]
+  P -- passes --> L[LLM rates skills, seniority, domain, preferences]
+  L --> V{Valid and consistent?}
+  V -- no --> R[Send error back to repair, max 3 tries]
+  R --> L
+  V -- yes --> W[Final score = weighted sum using your weights]
+```
+
+Design choices:
+
+1. **Filter cheaply first.** Rule-based checks skip obvious mismatches for free, so the LLM is only paid for jobs that could fit.
+2. **LLM output is untrusted.** The reply must match a JSON schema (Pydantic), stay in range (0–100), and pass rules the schema can't express. For example, the "missing must-haves" it reports must come from your own must-have list, so it can't invent requirements.
+3. **Retry-and-repair.** On any failure the exact error goes back to the model to fix, up to 3 attempts; after that the API returns 502 rather than bad data.
+4. **Scores computed in code.** The LLM rates the parts; the final score is a weighted sum using each user's weights, so the arithmetic is deterministic and personal.
+5. **Swappable provider.** The LLM sits behind a small `LLMClient` interface. Tests use a fake model with no network or API key.
+
